@@ -17,11 +17,11 @@ app.use(express.json());  // To parse JSON request bodies
 app.use(express.urlencoded({ extended: true }));  // To parse URL encoded bodies
 
 // Enable CORS (for requests from the frontend)
-app.use(cors());
 app.use(cors({
   origin: 'https://hapests.com',
-  credentials: true, // if you're using cookies or tokens
+  credentials: true,
 }));
+
 // Use routes
 app.use('/api', Main);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -45,6 +45,17 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // app.listen(PORT, () => {
 //   console.log(`Server is running on port ${PORT}`);
 // });
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`👉 ${req.method} ${req.url}`);
+  next();
+});
+
+// Catch all unhandled errors in routes
+app.use((err, req, res, next) => {
+  console.error('🔥 UNHANDLED ERROR:', err);
+  res.status(500).json({ msg: 'Server error', error: err.message });
+});
 
 // Start the server
 const PORT = process.env.PORT || 5000;
