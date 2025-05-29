@@ -202,7 +202,7 @@ class inputController {  // Change class name to FpController (uppercase 'F')
             if(selectedOption == "agile")
             {
                 var [verify_sprint] = await db.execute(
-                    'SELECT * FROM sprint WHERE estimation_id = ? AND status != 'In-progress' ORDER BY sprint_id DESC LIMIT 1;',
+                    'SELECT * FROM sprint WHERE estimation_id = ? AND status != 'In-progress' ORDER BY sprint_id DESC LIMIT 1',
                     [latest_estimation[0].estimation_id]
                 );
                 var [verify_sprint2] = await db.execute(
