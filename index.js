@@ -46,24 +46,8 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 //   console.log(`Server is running on port ${PORT}`);
 // });
 // Log all incoming requests
-app.use((req, res, next) => {
-  console.log(`👉 ${req.method} ${req.url}`);
-  next();
-});
-
-// Catch all unhandled errors in routes
-app.use((err, req, res, next) => {
-  console.error('🔥 UNHANDLED ERROR:', err);
-  res.status(500).json({ msg: 'Server error', error: err.message });
-});
-
-// Start the server
 const PORT = process.env.PORT || 5000;
-const HOST = '0.0.0.0';
-// app.listen(PORT, () => {
-//   console.log(`Server is running on port ${PORT}`);
-// });
 
-app.listen(PORT, HOST, () => {
-  console.log(`Server is running on http://${HOST}:${PORT}`);
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
 });
