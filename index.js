@@ -18,7 +18,7 @@ app.use(express.urlencoded({ extended: true }));  // To parse URL encoded bodies
 
 // Enable CORS (for requests from the frontend)
 app.use(cors({
-  origin: 'https://www.hapests.com/',
+  origin: '*',
   credentials: true,
 }));
 
