@@ -37,7 +37,7 @@ class HomeController {
             'INSERT INTO users (name, email, password, user_role ) VALUES (?, ?, ?, ?)',
             [name, email, password, userrole ]
         );
-        if(result)
+        if(result && userrole != 2)
           {
            await db.execute(
           'INSERT INTO employees (`employ_expertise`, `employ_salary`, `employ_profile`, `employ_phone_no`, `login_id`) VALUES (?, ?, ?, ?,?)',
