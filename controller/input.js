@@ -403,7 +403,7 @@ class inputController {  // Change class name to FpController (uppercase 'F')
             FROM fp_inputss fi
             JOIN inputs f ON fi.input_id = f.input_id
             WHERE f.project_id = ? and f.estimation_id = ?
-            AND fi.developer_id = ? AND f.complexity = '' limit 1;
+            AND fi.developer_id = ? AND (f.complexity = '' || f.complexity is null) limit 1;
             `;
             // Execute the query to fetch inputs based on projectId and developerId
             if(project.length > 0 )
