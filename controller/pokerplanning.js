@@ -1,147 +1,303 @@
-const db = require('../database');
-const agilecheck = require('./agilecheck');
-const { AgileEstimator } = require('./AgileEstimator');
-const CocomoController = require('./cocomoController');
+// module.exports = new ppController();
+const db = require('../config'); // Import the DB connection
+const fp = require('../controller/fp');
+const uc = require("../controller/usecase");
+const cocomo1 = require('./cocomo1');
+const agilee = require('./agilee');
 
-// Check if all developers have provided complexity for all inputs
-const checkAllStatus = async (req, res) => {
-  const projectId = req.params.projectId;
+const AgileEstimator = require('./agile'); // Import the class
 
-  try {
-    // Get the latest estimation for the project
-    const [project_info] = await db.execute(
-      `SELECT * FROM estimations WHERE project_id = ? ORDER BY estimation_id DESC LIMIT 1`,
-      [projectId]
-    );
 
-    if (!project_info || project_info.length === 0) {
-      return res.status(404).json({ message: "No estimation record found for this project." });
+class ppController {
+    async checkAllStatus(req, res) {
+        const projectId = req.params.project_id;
+        const id = req.query;
+
+        if (!id.id) {
+            return res.status(400).json({ message: "input_id is required" });
+        }
+
+        console.log('Checking status for Project ID:', projectId);
+
+        try {
+            // Check if developers exist
+            
+
+            
+            const [teamResult] = await db.execute('SELECT developer_id FROM team WHERE project_id = ?', [projectId]);
+            if (!teamResult.length) return res.status(404).json({ message: 'No developers found for this project.' });
+            const teamCount = teamResult.length; // Number of rows (developers in the team)
+            const [project_info] = await db.execute(`
+                SELECT * FROM estimations WHERE project_id = ? ORDER BY estimation_id DESC LIMIT 1;
+            `, [projectId]);
+            // Check if inputs exist
+            const [inputsResult] = await db.execute('SELECT input_id FROM inputs WHERE estimation_id=?', [project_info[0]["estimation_id"]]);
+            if (!inputsResult.length) return res.status(404).json({ message: 'No inputs found for this project.' });
+
+            const totalInputs = teamResult.length;
+
+            // Check how many inputs are marked as 'done'
+            const [statusResult] = await db.execute(`
+                SELECT COUNT(status) AS cs
+                FROM fp_inputss
+                LEFT JOIN inputs ON inputs.input_id = fp_inputss.input_id
+                WHERE inputs.estimation_id = ? AND status = 'done' AND fp_inputss.input_id = ?;
+            `, [project_info[0]["estimation_id"], id.id]);
+
+            const allInputsDone = totalInputs.toString() === statusResult[0].cs.toString();
+            let finalResponse = { allInputsDone };
+
+            if (allInputsDone) {
+                try {
+                    // Fetch responses for completed inputs
+                    const [responsesave] = await db.execute(`
+                        SELECT fp_inputss.developer_id, fp_inputss.complexity, users.name AS developer_name
+                        FROM fp_inputss
+                        LEFT JOIN inputs ON inputs.input_id = fp_inputss.input_id
+                        LEFT JOIN users ON users.userid = fp_inputss.developer_id
+                        WHERE inputs.estimation_id = ? AND status = 'done' AND fp_inputss.input_id = ?;
+                    `, [project_info[0]["estimation_id"], id.id]);
+
+                    // Fetch project estimation info
+                   
+
+                    if (!project_info.length) {
+                        return res.status(404).json({ message: "No estimation found for this project." });
+                    }
+
+                    const estimation_id = project_info[0]["estimation_id"];
+
+                    // Construct system-generated message
+                    let message = `This is a System-generated Message\nTeam Responses For Input No: ${id.id}:\n`;
+                    responsesave.forEach(record => {
+                        message += `Developer ${record.developer_name}: ${record.complexity} Complexity\n`;
+                    });
+
+                    // Insert message into messages table
+                    await db.execute(`
+                        INSERT INTO messages 
+                        (sender_id, project_id, message_text, message_type, timestamp, input_id) 
+                        VALUES (?, ?, ?, ?, NOW(), ?);
+                    `, [12, projectId, message, 'text', id.id]);
+
+                    const finalValueResponse = await this.finalvalue(id);
+                    finalResponse.finalValue = finalValueResponse;
+
+                    // Perform the correct estimation calculations
+                    if (project_info[0]["primary_technique_id"] === "FP") {
+                      console.error("Testinggggggg.");
+                        await fp.fpcalculate(projectId);
+                    } else if (project_info[0]["primary_technique_id"] === "UC") {
+                        await uc.uc_calculate(projectId);
+                    } else if (project_info[0]["primary_technique_id"] === "c1b" && project_info[0]["secondary_technique_id"] === "fp") {
+                        await fp.fpcalculate(projectId);
+                        await cocomo1.basic_calculate(projectId);
+                    } else if (project_info[0]["primary_technique_id"] === "c1b" && project_info[0]["secondary_technique_id"] === "kloc") {
+                        await cocomo1.basic_calculate();
+                    }else if (project_info[0]["primary_technique_id"] === "c1i" && project_info[0]["secondary_technique_id"] === "fp") {
+                        await fp.fpcalculate(projectId);
+                        await cocomo1.intermediate_calculate(projectId);
+                    } else if (project_info[0]["primary_technique_id"] === "c1i" && project_info[0]["secondary_technique_id"] === "kloc") {
+                        await cocomo1.intermediate_calculate();
+                    }else if (project_info[0]["primary_technique_id"] === "c1a" && project_info[0]["secondary_technique_id"] === "fp") {
+                        await fp.fpcalculate(projectId);
+                        await cocomo1.detailed_calculate(projectId);
+                    } else if (project_info[0]["primary_technique_id"] === "c1a" && project_info[0]["secondary_technique_id"] === "kloc") {
+                        await cocomo1.detailed_calculate();
+                    } else if (project_info[0]["primary_technique_id"] === "agile") {
+                         await agilee.user_interruption(projectId);
+                        // const [userStoriesResult] = await db.execute('SELECT input_id, complexity FROM inputs WHERE estimation_id = ?', [project_info[0]["estimation_id"]]);
+                        // const userStories = userStoriesResult.map(row => ({
+                        //     storyPoints: Number(row.complexity)  // Force convert to Number
+                        //   }));
+                        // const [salariesResult] = await db.execute('SELECT employ_salary FROM employees LEFT JOIN team ON login_id = developer_id WHERE project_id = ?', [projectId]);
+                        // const monthlySalaries = salariesResult.map(row => Number(row.employ_salary));
+                        // const [interruptionResult] = await db.execute(`SELECT SUM(interruptions.interruption_time) AS total_time FROM interruptions LEFT JOIN team ON team.developer_id = interruptions.developer_id WHERE interruptions.interruption_id IN (SELECT project_interruption_id FROM project_interruptions WHERE estimation_id = ?)`, [project_info[0]["estimation_id"]]);
+                        // const interruptedHoursPerDay = Number(interruptionResult[0].total_time) || 0;
+                        // var [verify_sprint] = await db.execute(
+                        //     'select * from sprint where estimation_id = ?  order by sprint_id DESC limit 1',
+                        //     [project_info[0]["estimation_id"]]
+                        // );
+                        // var [verify_task] = await db.execute(
+                        //     `SELECT COUNT(DISTINCT input_id) as totaltask
+                        //      FROM task
+                        //      WHERE sprint_id = ?;
+                        //      `,
+                        //     [verify_sprint[0].sprint_id]
+                        // );
+                        // const [storycount] = await db.execute('SELECT count(input_id) as totalstory FROM inputs WHERE estimation_id = ?', [project_info[0]["estimation_id"]]);
+
+                        // if(verify_task[0].totaltask == storycount[0].totalstory)
+                        // {
+                        // const estimator = new AgileEstimator(4, verify_sprint[0].velocity, monthlySalaries, teamCount, interruptedHoursPerDay, verify_sprint[0].sprint_days,projectId);
+                        // const results = estimator.runEstimation(userStories);
+                        // console.log(results);
+                        // }
+                       
+                    }
+
+                   
+                } catch (err) {
+                    console.error('Error in finalvalue:', err.message);
+                    finalResponse.finalValue = { message: 'Error in finalvalue calculation', error: err.message };
+                }
+            } else {
+                finalResponse.finalValue = { message: 'Not all inputs are marked as "Done"' };
+            }
+
+            const developerComplexityResponse = await this.saveDeveloperComplexity(projectId, id.id);
+            finalResponse.developerComplexity = developerComplexityResponse;
+            const [input_info] = await db.execute(`
+                SELECT * FROM inputs WHERE input_id = ? limit 1;
+            `, [id.id]);
+            res.status(200).json({
+                message: 'Status check completed successfully.',
+                success: true,
+                result: finalResponse,
+                input_info: input_info[0].complexity
+            });
+        } catch (err) {
+            console.error('Database Error:', err);
+            res.status(500).json({ message: 'Error checking status', error: err.message });
+        }
+    }
+    async agilecheck(req,res)
+    {
+        try{
+            console.log("test");
+
+            const projectId = req.params.project_id;
+            const [project_info] = await db.execute(`
+                SELECT * FROM estimations WHERE project_id = ? ORDER BY estimation_id DESC LIMIT 1;
+            `, [projectId]);
+            const [userStoriesResult] = await db.execute('SELECT input_id, complexity FROM inputs WHERE estimation_id = ?', [project_info[0]["estimation_id"]]);
+            const userStories = userStoriesResult.map(row => ({
+                storyPoints: Number(row.complexity)  // Force convert to Number
+              }));
+            const [salariesResult] = await db.execute('SELECT employ_salary FROM employees LEFT JOIN team ON login_id = developer_id WHERE project_id = ?', [projectId]);
+            const monthlySalaries = salariesResult.map(row => Number(row.employ_salary));
+            const [interruptionResult] = await db.execute(`SELECT SUM(interruptions.interruption_time) AS total_time FROM interruptions LEFT JOIN team ON team.developer_id = interruptions.developer_id WHERE interruptions.interruption_id IN (SELECT project_interruption_id FROM project_interruptions WHERE estimation_id = ?)`, [project_info[0]["estimation_id"]]);
+            const interruptedHoursPerDay = Number(interruptionResult[0].total_time) || 0;
+            var [verify_sprint] = await db.execute(
+                'select * from sprint where estimation_id = ?  order by sprint_id DESC limit 1',
+                [project_info[0]["estimation_id"]]
+            );
+            var [verify_task] = await db.execute(
+                `SELECT COUNT(DISTINCT input_id) as totaltask
+                 FROM task
+                 WHERE sprint_id = ?;
+                 `,
+                [verify_sprint[0].sprint_id]
+            );
+            console.log(verify_sprint[0].sprint_id)
+            const [storycount] = await db.execute('SELECT count(input_id) as totalstory FROM inputs WHERE estimation_id = ?', [project_info[0]["estimation_id"]]);
+            const [teamResult] = await db.execute('SELECT developer_id FROM team WHERE project_id = ?', [projectId]);
+            const teamCount = teamResult.length; // Number of rows (developers in the team)
+            console.log("not fullfill");
+            console.log("task"+verify_task[0].totaltask);
+            console.log("story"+storycount[0].totalstory);
+            if(verify_task[0].totaltask == storycount[0].totalstory)
+            {
+                console.log("check");
+             await agilee.user_interruption(projectId);
+            //     console.log("enter");
+            // const estimator = new AgileEstimator(4, verify_sprint[0].velocity, monthlySalaries, teamCount, interruptedHoursPerDay, verify_sprint[0].sprint_days,projectId);
+            // const results = estimator.runEstimation(userStories);
+            // console.log(results);
+
+            res.status(200).json({ message: 'Estimated', data: "results" });
+
+            }
+        }catch(err)
+        {
+            console.error('Error in finalvalue:', err.message);
+
+        }
+      
+    }
+    async finalvalue(id) {
+        try {
+            console.log("Updating final complexity value...");
+           
+            const [result] = await db.execute(`
+                UPDATE inputs SET complexity = (
+                    SELECT complexity FROM fp_inputss
+                    WHERE input_id = ? AND status = 'done' AND complexity IS NOT NULL
+                    GROUP BY complexity
+                    HAVING COUNT(complexity) * 100.0 / (
+                        SELECT COUNT(complexity) FROM fp_inputss
+                        WHERE input_id = ? AND status = 'done' AND complexity IS NOT NULL
+                    ) > 50 LIMIT 1
+                ) WHERE input_id = ?;
+            `, [id.id, id.id, id.id]);
+
+            if (result.affectedRows === 0) {
+                await db.execute(`UPDATE fp_inputss SET status = '', spell = spell + 1 WHERE input_id = ?`, [id.id]);
+                return { message: 'No update performed: conditions not met.' };
+            }
+
+            return { message: 'Final complexity value updated successfully.' };
+        } catch (err) {
+            console.error('Error in finalvalue:', err.message);
+            throw err;
+        }
     }
 
-    const estimation_id = project_info[0]["estimation_id"];
-    const estimation_type = project_info[0]["estimation_type"];
+    async saveDeveloperComplexity(projectId, inputid) {
+        try {
+            
+                const [dbResult] = await db.execute(`
+                    SELECT DISTINCT developer_id, complexity
+                    FROM fp_inputss
+                    WHERE input_id = ? AND complexity IS NOT NULL AND complexity != ''
+                    AND complexity NOT IN (
+                        SELECT complexity 
+                        FROM fp_inputss 
+                        WHERE input_id = ?
+                        GROUP BY complexity 
+                        HAVING COUNT(*) > 1
+                    );
+                `, [inputid, inputid]);
 
-    // Get team size
-    const [teamResult] = await db.execute(
-      `SELECT developer_id FROM team WHERE project_id = ?`,
-      [projectId]
-    );
+                if (!dbResult.length) return { message: 'No distinct complexity found', data: null };
 
-    // Get inputs associated with estimation
-    const [inputsResult] = await db.execute(
-      `SELECT input_id FROM estimation_inputs WHERE estimation_id = ?`,
-      [estimation_id]
-    );
+                var result = dbResult;
+            
 
-    let allInputsCompleted = true;
-
-    for (const input of inputsResult) {
-      const inputId = input.input_id;
-
-      const [statusResult] = await db.execute(
-        `SELECT COUNT(DISTINCT developer_id) as cs FROM developer_complexity WHERE input_id = ?`,
-        [inputId]
-      );
-
-      if (statusResult[0].cs !== teamResult.length) {
-        allInputsCompleted = false;
-        break;
-      }
+            return { message: 'Developer complexity saved successfully', data: result };
+        } catch (err) {
+            console.error('Error saving developer complexity:', err.message);
+            return { message: 'Error saving developer complexity', error: err.message };
+        }
     }
 
-    if (allInputsCompleted) {
-      // Calculate final complexity for each input
-      for (const input of inputsResult) {
-        await finalvalue(input.input_id);
-      }
+    async outputvalues(req, res) {
+        const projectId = req.params.project_id;
 
-      // Perform estimation based on type
-      const cocomo1 = new CocomoController();
+        try {
+            console.log(projectId);
+            const [result] = await db.execute(`SELECT pe.*, e.*
+            FROM project_estimation pe
+            JOIN estimations e ON pe.estimation_technique = e.estimation_id
+            WHERE pe.project_id = ?;
+            `, [projectId]);
 
-      switch (estimation_type) {
-        case "agile":
-          await agilecheck.finalvalue(projectId);
-          break;
-        case "cocomo1_basic":
-          await cocomo1.basic_calculate(projectId);
-          break;
-        case "cocomo1_intermediate":
-          await cocomo1.intermediate_calculate(projectId);
-          break;
-        case "cocomo1_detailed":
-          await cocomo1.detailed_calculate(projectId);
-          break;
-        default:
-          return res.status(400).json({ message: "Unknown estimation type." });
-      }
+            const [project_info] = await db.execute(
+                `SELECT * FROM estimations WHERE project_id= ? ORDER BY estimation_id DESC LIMIT 1;`,
+                [projectId]
+            );
+            var [sprint] = await db.execute(
+                'select * from sprint where estimation_id = ? and status = ? order by sprint_id ',
+                [project_info[0]["estimation_id"],"Completed"]
+            );
+            console.log(sprint);
+            console.log(result);
 
-      return res.json({ message: 'All inputs checked and estimation performed.' });
-    } else {
-      return res.json({ message: 'Not all inputs have been completed yet.' });
+            res.status(200).json({ message: 'All inputs are shown', data: result,sprint:sprint });
+        } catch (err) {
+            res.status(500).json({ message: 'Error fetching output values', error: err.message });
+        }
     }
-
-  } catch (err) {
-    console.error('Error checking status:', err.message);
-    return res.status(500).json({ message: 'Error checking status', error: err.message });
-  }
-};
-
-// Find most frequent complexity value and update it
-const finalvalue = async (id) => {
-  try {
-    const [rows] = await db.execute(
-      `SELECT complexity FROM developer_complexity WHERE input_id = ?`,
-      [id]
-    );
-
-    const frequencyMap = {};
-    let maxFreq = 0;
-    let mostFrequentValue = null;
-
-    rows.forEach(row => {
-      const val = row.complexity;
-      frequencyMap[val] = (frequencyMap[val] || 0) + 1;
-
-      if (frequencyMap[val] > maxFreq) {
-        maxFreq = frequencyMap[val];
-        mostFrequentValue = val;
-      }
-    });
-
-    // Update final agreed complexity
-    await db.execute(
-      `UPDATE estimation_inputs SET complexity = ? WHERE input_id = ?`,
-      [mostFrequentValue, id]
-    );
-
-    // Log message
-    const message = `The most agreed upon complexity value for input ID ${id} is ${mostFrequentValue}`;
-
-    await db.execute(`
-      INSERT INTO messages 
-      (sender_id, project_id, message_text, message_type, timestamp, input_id) 
-      VALUES (?, ?, ?, ?, NOW(), ?);
-    `, [12, null, message, 'text', id]);
-
-  } catch (err) {
-    console.error('Error in finalvalue:', err.message);
-  }
-};
-
-// Get distinct complexity values submitted by developers
-const saveDeveloperComplexity = async (projectId, inputid) => {
-  try {
-    const [rows] = await db.execute(`
-      SELECT DISTINCT complexity FROM developer_complexity WHERE project_id = ? AND input_id = ?
-    `, [projectId, inputid]);
-
-    return rows.map(row => row.complexity);
-  } catch (err) {
-    console.error('Error fetching developer complexities:', err.message);
-    return [];
-  }
-};
-
-
+}
 
 module.exports = new ppController();
