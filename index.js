@@ -17,6 +17,12 @@ process.on('unhandledRejection', (err) => {
 process.on('uncaughtException', (err) => {
   console.error("Uncaught Exception:", err);
 });
+// Log all incoming requests
+app.use((req, res, next) => {
+  console.log(`📥 ${req.method} ${req.url}`);
+  next();
+});
+
 // Middleware to parse JSON requests
 app.use(express.json());  // To parse JSON request bodies
 app.use(express.urlencoded({ extended: true }));  // To parse URL encoded bodies
