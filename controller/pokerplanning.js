@@ -307,6 +307,7 @@ class ppController {
 
                     // Perform the correct estimation calculations
                     if (project_info[0]["primary_technique_id"] === "FP") {
+                      console.log("Testinggggggg.");
                         await fp.fpcalculate(projectId);
                     } else if (project_info[0]["primary_technique_id"] === "UC") {
                         await uc.uc_calculate(projectId);
