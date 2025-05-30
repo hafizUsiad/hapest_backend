@@ -212,12 +212,14 @@ class ProjectController {
           'select * from sprint where estimation_id = ?  order by sprint_id DESC limit 1',
           [latest_estimation[0].estimation_id]
       );
+         console.log(verify_sprint);
         if(verify_sprint)
           {
             const [existance_check] =  await db.execute(
               'select * from task where sprint_id = ? and input_id = ? and developer_id=?',
               [verify_sprint[0].sprint_id,input_id,developer_id]
               );
+               console.log(existance_check);
               if(existance_check.length <= 0)
               {
                 await db.execute(
