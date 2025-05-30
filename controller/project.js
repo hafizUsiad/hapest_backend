@@ -224,8 +224,15 @@ class ProjectController {
                     'INSERT INTO `task`(`sprint_id`, `input_id`, `developer_id`) VALUES (?,?,?)',
                     [verify_sprint[0].sprint_id,input_id,developer_id]
                 );
-                   console.log(INSERT INTO `task`(`sprint_id`, `input_id`, `developer_id`) VALUES (?,?,?)',
-                    [verify_sprint[0].sprint_id,input_id,developer_id]);
+                  console.log(
+  "INSERT INTO `task`(`sprint_id`, `input_id`, `developer_id`) VALUES (?,?,?)",
+  [
+    verify_sprint[0].sprint_id,
+    input_id,
+    developer_id
+  ]
+);
+
                 res.status(200).json({
                   message: 'All Task Assigned successfully...!'
               });
